@@ -6,10 +6,8 @@ if (!process.env.MONGODB_URI) {
 
 const uri = process.env.MONGODB_URI
 const options = {
-  ssl: true,
-  sslValidate: true,
-  useNewUrlParser: true,
   useUnifiedTopology: true,
+  useNewUrlParser: true,
 }
 
 let client
@@ -26,7 +24,9 @@ if (process.env.NODE_ENV === 'development') {
   clientPromise = client.connect()
 }
 
-clientPromise.catch(error => {
+clientPromise.then(() => {
+  console.log('Connected to MongoDB')
+}).catch((error) => {
   console.error('Failed to connect to MongoDB:', error)
 })
 

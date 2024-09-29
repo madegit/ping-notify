@@ -1,10 +1,12 @@
-import NextAuth from 'next-auth'
+// pages/api/auth/[...nextauth].ts
+
+import NextAuth, { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter"
 import clientPromise from '@/lib/mongodb'
-import { compare, hash } from 'bcrypt'
+import { compare } from 'bcrypt'
 
-export default NextAuth({
+export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(clientPromise),
   providers: [
     CredentialsProvider({
@@ -60,4 +62,6 @@ export default NextAuth({
   pages: {
     signIn: '/login'
   }
-})
+}
+
+export default NextAuth(authOptions)

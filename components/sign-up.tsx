@@ -35,12 +35,14 @@ export default function SignUp() {
           router.push('/dashboard')
           toast.success("Account created", "You've been successfully signed up and logged in.")
         } else {
-          toast.error("Login failed", "Please try logging in manually.")
+          toast.error("Login failed", result?.error || "Please try logging in manually.")
         }
       } else {
-        toast.error("Sign up failed", "Please try again.")
+        const errorData = await res.json()
+        toast.error("Sign up failed", errorData.message || "Please try again.")
       }
     } catch (error) {
+      console.error(error)
       toast.error("An error occurred", "Please try again later.")
     }
   }

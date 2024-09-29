@@ -11,21 +11,30 @@ import { Mail, Lock } from 'lucide-react'
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
   const toast = useCustomToast()
   const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    const result = await signIn('credentials', {
-      redirect: false,
-      email,
-      password,
-    })
-    if (result?.ok) {
-      router.push('/dashboard')
-      toast.success("Logged in successfully", "Welcome back!")
-    } else {
-      toast.error("Login failed", "Please check your credentials and try again.")
+    setIsLoading(true)
+    try {
+      const result = await signIn('credentials', {
+        redirect: false,
+        email,
+        password,
+      })
+      if (result?.ok) {
+        router.push('/dashboard')
+        toast.success("Logged in successfully", "Welcome back!")
+      } else {
+        toast.error("Login failed", result?.error || "Please check your credentials and try again.")
+      }
+    } catch (error) {
+      console.error("Login error:", error)
+      toast.error("An error occurred", "Please try again later.")
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -60,7 +69,9 @@ export default function Login() {
           />
         </div>
       </div>
-      <Button type="submit" className="w-full">Login</Button>
+      <Button type="submit" className="w-full" disabled={isLoading}>
+        {isLoading ? 'Logging in...' : 'Login'}
+      </Button>
     </form>
   )
 }
