@@ -1,15 +1,16 @@
-'use client'
+"use client"
 
 import { useState, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useToast } from "@/components/ui/use-toast"
+import { useCustomToast } from "@/hooks/use-toast"
 import { Loader2, Trash2, Globe, CheckCircle, XCircle } from "lucide-react"
+import { useSession } from "next-auth/react"
 
 type Website = {
-  id: string;
+  _id: string;
   url: string;
   status: 'up' | 'down' | 'checking';
 }
@@ -17,11 +18,15 @@ type Website = {
 export default function Dashboard() {
   const [websites, setWebsites] = useState<Website[]>([])
   const [newUrl, setNewUrl] = useState('')
-  const { toast } = useToast()
+  const toast = useCustomToast()
+  const { data: session } = useSession()
 
   useEffect(() => {
-    fetchWebsites()
-  }, [])
+    // If session.user exists and has an id, fetch the websites
+    if (session?.user?.id) {
+      fetchWebsites()
+    }
+  }, [session])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -37,18 +42,10 @@ export default function Dashboard() {
         const data = await response.json()
         setWebsites(data)
       } else {
-        toast({
-          title: "Failed to fetch websites",
-          description: "Please try again later.",
-          variant: "destructive",
-        })
+        toast.error("Failed to fetch websites", "Please try again later.")
       }
     } catch (error) {
-      toast({
-        title: "An error occurred",
-        description: "Please try again later.",
-        variant: "destructive",
-      })
+      toast.error("An error occurred", "Please try again later.")
     }
   }
 
@@ -68,18 +65,10 @@ export default function Dashboard() {
         setNewUrl('')
         checkStatus(newWebsite)
       } else {
-        toast({
-          title: "Failed to add website",
-          description: "Please try again.",
-          variant: "destructive",
-        })
+        toast.error("Failed to add website", "Please try again.")
       }
     } catch (error) {
-      toast({
-        title: "An error occurred",
-        description: "Please try again later.",
-        variant: "destructive",
-      })
+      toast.error("An error occurred", "Please try again later.")
     }
   }
 
@@ -89,20 +78,14 @@ export default function Dashboard() {
         method: 'DELETE'
       })
       if (response.ok) {
-        setWebsites(websites.filter(site => site.id !== id))
+        setWebsites(websites.filter(site => site._id !== id))
+        toast.success("Website removed", "The website has been successfully removed.")
       } else {
-        toast({
-          title: "Failed to remove website",
-          description: "Please try again.",
-          variant: "destructive",
-        })
+        toast.error("Failed to remove website", "Please try again.")
       }
     } catch (error) {
-      toast({
-        title: "An error occurred",
-        description: "Please try again later.",
-        variant: "destructive",
-      })
+      console.error('Error removing website:', error)
+      toast.error("An error occurred", "Please try again later.")
     }
   }
 
@@ -121,23 +104,15 @@ export default function Dashboard() {
       }
 
       const data = await response.json()
-      updateWebsiteStatus(website.id, data.status)
+      updateWebsiteStatus(website._id, data.status)
 
       if (data.status === 'down') {
-        toast({
-          title: "Website is down!",
-          description: `${website.url} is currently unreachable.`,
-          variant: "destructive",
-        })
+        toast.error("Website is down!", `${website.url} is currently unreachable.`)
       }
     } catch (err) {
       console.error('Error checking website status:', err)
-      updateWebsiteStatus(website.id, 'down')
-      toast({
-        title: "Error checking website",
-        description: `Unable to check status for ${website.url}.`,
-        variant: "destructive",
-      })
+      updateWebsiteStatus(website._id, 'down')
+      toast.error("Error checking website", `Unable to check status for ${website.url}.`)
     }
   }
 
@@ -152,21 +127,14 @@ export default function Dashboard() {
       })
       if (response.ok) {
         setWebsites(websites.map(site => 
-          site.id === id ? { ...site, status } : site
+          site._id === id ? { ...site, status } : site
         ))
       } else {
-        toast({
-          title: "Failed to update website status",
-          description: "Please try again.",
-          variant: "destructive",
-        })
+        toast.error("Failed to update website status", "Please try again.")
       }
     } catch (error) {
-      toast({
-        title: "An error occurred",
-        description: "Please try again later.",
-        variant: "destructive",
-      })
+      console.error('Error updating website status:', error)
+      toast.error("An error occurred", "Please try again later.")
     }
   }
 
@@ -201,19 +169,19 @@ export default function Dashboard() {
           </TableHeader>
           <TableBody>
             {websites.map((site) => (
-              <TableRow key={site.id}>
+              <TableRow key={site._id}>
                 <TableCell>{site.url}</TableCell>
                 <TableCell>
                   {site.status === 'checking' ? (
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   ) : site.status === 'up' ? (
-                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <CheckCircle className="h-4 w-4 text-green-500" /> 
                   ) : (
                     <XCircle className="h-4 w-4 text-red-500" />
                   )}
                 </TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="sm" onClick={() => removeWebsite(site.id)}>
+                  <Button variant="ghost" size="sm" onClick={() => removeWebsite(site._id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </TableCell>

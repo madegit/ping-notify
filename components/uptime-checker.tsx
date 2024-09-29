@@ -17,11 +17,23 @@ export function UptimeCheckerComponent() {
     setError(null)
 
     try {
-      const response = await fetch(url, { mode: 'no-cors' })
-      setStatus(response.status === 0 ? 'up' : 'down')
+      const response = await fetch('/api/check-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to check status')
+      }
+
+      const data = await response.json()
+      setStatus(data.status)
     } catch (err) {
       setStatus('down')
-      setError('Unable to reach the website')
+      setError('Unable to check the website status')
     }
   }
 
