@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,32 +20,44 @@ export default function Dashboard() {
   const [newUrl, setNewUrl] = useState('')
   const toast = useCustomToast()
   const { data: session } = useSession()
+  const websitesRef = useRef<Website[]>([])
 
   useEffect(() => {
-    // If session.user exists and has an id, fetch the websites
     if (session?.user?.id) {
       fetchWebsites()
     }
   }, [session])
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      websites.forEach(checkStatus)
-    }, 300000) // Check every 5 minutes
-    return () => clearInterval(interval)
+    websitesRef.current = websites
   }, [websites])
+
+  useEffect(() => {
+    const checkAllWebsites = async () => {
+      for (const website of websitesRef.current) {
+        await checkStatus(website)
+      }
+    }
+
+    checkAllWebsites() // Check immediately on mount
+
+    const interval = setInterval(checkAllWebsites, 300000) // Check every 5 minutes
+    return () => clearInterval(interval)
+  }, [])
 
   const fetchWebsites = async () => {
     try {
       const response = await fetch('/api/websites')
       if (response.ok) {
         const data = await response.json()
-        setWebsites(data)
+        setWebsites(data.map((site: Website) => ({ ...site, status: 'checking' })))
+        // Check status for each website immediately after fetching
+        data.forEach((site: Website) => checkStatus(site))
       } else {
-        toast.error("Failed to fetch websites", "Please try again later.")
+        toast.error("Failed to fetch websites", "Please try again later.", <XCircle className="h-4 w-4" />)
       }
     } catch (error) {
-      toast.error("An error occurred", "Please try again later.")
+      toast.error("An error occurred", "Please try again later.", <XCircle className="h-4 w-4" />)
     }
   }
 
@@ -61,14 +73,15 @@ export default function Dashboard() {
       })
       if (response.ok) {
         const newWebsite = await response.json()
-        setWebsites([...websites, newWebsite])
+        setWebsites(prevWebsites => [...prevWebsites, { ...newWebsite, status: 'checking' }])
         setNewUrl('')
+        toast.success("Website added", "Checking status...", <CheckCircle className="h-4 w-4" />)
         checkStatus(newWebsite)
       } else {
-        toast.error("Failed to add website", "Please try again.")
+        toast.error("Failed to add website", "Please try again.", <XCircle className="h-4 w-4" />)
       }
     } catch (error) {
-      toast.error("An error occurred", "Please try again later.")
+      toast.error("An error occurred", "Please try again later.", <XCircle className="h-4 w-4" />)
     }
   }
 
@@ -78,18 +91,18 @@ export default function Dashboard() {
         method: 'DELETE'
       })
       if (response.ok) {
-        setWebsites(websites.filter(site => site._id !== id))
-        toast.success("Website removed", "The website has been successfully removed.")
+        setWebsites(prevWebsites => prevWebsites.filter(site => site._id !== id))
+        toast.success("Website removed", "The website has been successfully removed.", <CheckCircle className="h-4 w-4" />)
       } else {
-        toast.error("Failed to remove website", "Please try again.")
+        toast.error("Failed to remove website", "Please try again.", <XCircle className="h-4 w-4" />)
       }
     } catch (error) {
       console.error('Error removing website:', error)
-      toast.error("An error occurred", "Please try again later.")
+      toast.error("An error occurred", "Please try again later.", <XCircle className="h-4 w-4" />)
     }
   }
 
-  const checkStatus = async (website: Website) => {
+  const checkStatus = useCallback(async (website: Website) => {
     try {
       const response = await fetch('/api/check-status', {
         method: 'POST',
@@ -107,36 +120,20 @@ export default function Dashboard() {
       updateWebsiteStatus(website._id, data.status)
 
       if (data.status === 'down') {
-        toast.error("Website is down!", `${website.url} is currently unreachable.`)
+        toast.error("Website is down!", `${website.url} is currently unreachable.`, <XCircle className="h-4 w-4" />)
       }
     } catch (err) {
       console.error('Error checking website status:', err)
       updateWebsiteStatus(website._id, 'down')
-      toast.error("Error checking website", `Unable to check status for ${website.url}.`)
+      toast.error("Error checking website", `Unable to check status for ${website.url}.`, <XCircle className="h-4 w-4" />)
     }
-  }
+  }, [toast])
 
-  const updateWebsiteStatus = async (id: string, status: 'up' | 'down') => {
-    try {
-      const response = await fetch(`/api/websites/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status })
-      })
-      if (response.ok) {
-        setWebsites(websites.map(site => 
-          site._id === id ? { ...site, status } : site
-        ))
-      } else {
-        toast.error("Failed to update website status", "Please try again.")
-      }
-    } catch (error) {
-      console.error('Error updating website status:', error)
-      toast.error("An error occurred", "Please try again later.")
-    }
-  }
+  const updateWebsiteStatus = useCallback((id: string, status: 'up' | 'down') => {
+    setWebsites(prevWebsites => prevWebsites.map(site => 
+      site._id === id ? { ...site, status } : site
+    ))
+  }, [])
 
   return (
     <Card className="w-full max-w-4xl mx-auto">
@@ -173,11 +170,20 @@ export default function Dashboard() {
                 <TableCell>{site.url}</TableCell>
                 <TableCell>
                   {site.status === 'checking' ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <div className="flex items-center">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-2" />
+                      Checking
+                    </div>
                   ) : site.status === 'up' ? (
-                    <CheckCircle className="h-4 w-4 text-green-500" /> 
+                    <div className="flex items-center">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                      Online
+                    </div>
                   ) : (
-                    <XCircle className="h-4 w-4 text-red-500" />
+                    <div className="flex items-center">
+                      <XCircle className="h-4 w-4 text-red-500 mr-2" />
+                      Offline
+                    </div>
                   )}
                 </TableCell>
                 <TableCell>
