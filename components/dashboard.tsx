@@ -1,25 +1,54 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useCustomToast } from "@/hooks/use-toast"
-import { Loader2, Trash2, Globe, CheckCircle, XCircle } from "lucide-react"
-import { useSession } from "next-auth/react"
+import { Loader2, Trash2, Globe, CheckCircle, XCircle, ExternalLink, LogOut } from "lucide-react"
+import { useSession, signOut } from "next-auth/react"
+import { Session } from "next-auth"
+import Image from "next/image"
+import Link from "next/link"
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 type Website = {
-  _id: string;
-  url: string;
-  status: 'up' | 'down' | 'checking';
+  _id: string
+  url: string
+  status: "up" | "down" | "checking"
+  lastChecked?: string
+  responseTime?: number
+  favicon?: string
+  ip?: string
+  dns?: {
+    a?: string[]
+    cname?: string[]
+    mx?: string[]
+  }
+  siteName?: string
+  siteDescription?: string
+}
+
+interface CustomSession extends Session {
+  user: {
+    id: string
+    name?: string | null
+    email?: string | null
+    image?: string | null
+  }
+}
+
+function truncateUrl(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/\/$/, "")
 }
 
 export default function Dashboard() {
   const [websites, setWebsites] = useState<Website[]>([])
-  const [newUrl, setNewUrl] = useState('')
+  const [newUrl, setNewUrl] = useState("")
   const toast = useCustomToast()
-  const { data: session } = useSession()
+  const { data: session } = useSession() as { data: CustomSession | null }
   const websitesRef = useRef<Website[]>([])
 
   useEffect(() => {
@@ -39,163 +68,347 @@ export default function Dashboard() {
       }
     }
 
-    checkAllWebsites() // Check immediately on mount
+    checkAllWebsites()
 
-    const interval = setInterval(checkAllWebsites, 300000) // Check every 5 minutes
+    const interval = setInterval(checkAllWebsites, 300000)
     return () => clearInterval(interval)
   }, [])
 
   const fetchWebsites = async () => {
     try {
-      const response = await fetch('/api/websites')
+      const response = await fetch("/api/websites")
       if (response.ok) {
         const data = await response.json()
-        setWebsites(data.map((site: Website) => ({ ...site, status: 'checking' })))
-        // Check status for each website immediately after fetching
+        setWebsites(
+          data.map((site: Website) => ({ ...site, status: "checking" }))
+        )
         data.forEach((site: Website) => checkStatus(site))
       } else {
-        toast.error("Failed to fetch websites", "Please try again later.", <XCircle className="h-4 w-4" />)
+        toast.error("Failed to fetch websites", "Please try again later.")
       }
     } catch (error) {
-      toast.error("An error occurred", "Please try again later.", <XCircle className="h-4 w-4" />)
+      toast.error("An error occurred", "Please try again later.")
     }
   }
 
   const addWebsite = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const response = await fetch('/api/websites', {
-        method: 'POST',
+      const response = await fetch("/api/websites", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ url: newUrl })
+        body: JSON.stringify({ url: newUrl }),
       })
       if (response.ok) {
         const newWebsite = await response.json()
-        setWebsites(prevWebsites => [...prevWebsites, { ...newWebsite, status: 'checking' }])
-        setNewUrl('')
-        toast.success("Website added", "Checking status...", <CheckCircle className="h-4 w-4" />)
+        setWebsites((prevWebsites) => [
+          ...prevWebsites,
+          { ...newWebsite, status: "checking" },
+        ])
+        setNewUrl("")
+        toast.success("Website added", "Checking status...")
         checkStatus(newWebsite)
       } else {
-        toast.error("Failed to add website", "Please try again.", <XCircle className="h-4 w-4" />)
+        toast.error("Failed to add website", "Please try again.")
       }
     } catch (error) {
-      toast.error("An error occurred", "Please try again later.", <XCircle className="h-4 w-4" />)
+      toast.error("An error occurred", "Please try again later.")
     }
   }
 
   const removeWebsite = async (id: string) => {
     try {
       const response = await fetch(`/api/websites/${id}`, {
-        method: 'DELETE'
+        method: "DELETE",
       })
       if (response.ok) {
-        setWebsites(prevWebsites => prevWebsites.filter(site => site._id !== id))
-        toast.success("Website removed", "The website has been successfully removed.", <CheckCircle className="h-4 w-4" />)
+        setWebsites((prevWebsites) =>
+          prevWebsites.filter((site) => site._id !== id)
+        )
+        toast.success(
+          "Website removed",
+          "The website has been successfully removed."
+        )
       } else {
-        toast.error("Failed to remove website", "Please try again.", <XCircle className="h-4 w-4" />)
+        toast.error("Failed to remove website", "Please try again.")
       }
     } catch (error) {
-      console.error('Error removing website:', error)
-      toast.error("An error occurred", "Please try again later.", <XCircle className="h-4 w-4" />)
+      console.error("Error removing website:", error)
+      toast.error("An error occurred", "Please try again later.")
     }
   }
 
-  const checkStatus = useCallback(async (website: Website) => {
-    try {
-      const response = await fetch('/api/check-status', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url: website.url }),
-      })
+  const checkStatus = useCallback(
+    async (website: Website) => {
+      try {
+        const response = await fetch("/api/check-status", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url: website.url, isPublic: false, userId: session?.user?.id }),
+        })
 
-      if (!response.ok) {
-        throw new Error('Network response was not ok')
+        if (!response.ok) {
+          throw new Error("Network response was not ok")
+        }
+
+        const data = await response.json()
+        updateWebsiteStatus(website._id, data)
+
+        if (data.status === "down") {
+          toast.error(
+            "Website is down!",
+            `${website.url} is currently unreachable.`
+          )
+        }
+      } catch (err) {
+        console.error("Error checking website status:", err)
+        updateWebsiteStatus(website._id, { status: "down" })
+        toast.error(
+          "Error checking website",
+          `Unable to check status for ${website.url}.`
+        )
       }
+    },
+    [toast, session]
+  )
 
-      const data = await response.json()
-      updateWebsiteStatus(website._id, data.status)
+  const updateWebsiteStatus = useCallback(
+    (id: string, data: Partial<Website>) => {
+      setWebsites((prevWebsites) =>
+        prevWebsites.map((site) =>
+          site._id === id ? { ...site, ...data } : site
+        )
+      )
+    },
+    []
+  )
 
-      if (data.status === 'down') {
-        toast.error("Website is down!", `${website.url} is currently unreachable.`, <XCircle className="h-4 w-4" />)
-      }
-    } catch (err) {
-      console.error('Error checking website status:', err)
-      updateWebsiteStatus(website._id, 'down')
-      toast.error("Error checking website", `Unable to check status for ${website.url}.`, <XCircle className="h-4 w-4" />)
-    }
-  }, [toast])
+  const handleLogout = () => {
+    signOut({ callbackUrl: "/" })
+  }
 
-  const updateWebsiteStatus = useCallback((id: string, status: 'up' | 'down') => {
-    setWebsites(prevWebsites => prevWebsites.map(site => 
-      site._id === id ? { ...site, status } : site
-    ))
-  }, [])
+  const websitesUp = websites.filter((site) => site.status === "up").length
+  const websitesDown = websites.filter((site) => site.status === "down").length
+  const websitesChecking = websites.filter(
+    (site) => site.status === "checking"
+  ).length
+
+  const pieChartData = [
+    { name: "Up", value: websitesUp, color: "#10B981" },
+    { name: "Down", value: websitesDown, color: "#EF4444" },
+    { name: "Checking", value: websitesChecking, color: "#6B7280" },
+  ]
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+  }
 
   return (
-    <Card className="w-full max-w-4xl mx-auto">
-      <CardHeader>
-        <CardTitle>Website Monitoring Dashboard</CardTitle>
-        <CardDescription>Add and monitor your websites</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={addWebsite} className="flex space-x-2 mb-4">
-          <div className="relative flex-grow">
-            <Globe className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="url"
-              placeholder="https://example.com"
-              value={newUrl}
-              onChange={(e) => setNewUrl(e.target.value)}
-              className="pl-8"
-              required
-            />
+    <div className="flex flex-col min-h-screen">
+      <div className="flex justify-between w-full items-center px-2 lg:px-10 space-x-4">
+        <Avatar className="bg-blue-50 p-4">
+          <AvatarImage src={session?.user?.image || ""} alt="User" />
+          <AvatarFallback>{getInitials(session?.user?.name || "User")}</AvatarFallback>
+        </Avatar>
+        <Button onClick={handleLogout} variant="outline" className=" bg-transparent shadow-none rounded-lg">
+          <LogOut className="w-4 h-4 text-[#0500FF]" />
+          <span className="hidden sm:inline ml-2">Logout</span>
+        </Button>
+      </div>
+      
+      {/* Main content */}
+      <main className="flex-1 p-4 sm:p-6 lg:p-8">
+        <h1 className="text-4xl font-semibold tracking-tighter text-gray-900 mb-5">
+          Welcome, {session?.user?.name}!
+        </h1>
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Quick Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Card className="bg-[#0500FF] text-white">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold tracking-tighter text-gray-200">Total Websites</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-4xl font-semibold tracking-tight">{websites.length}</p>
+                <p className="text-sm text-gray-400 tracking-tight">Monitored websites</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold tracking-tighter">Websites Online</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-4xl font-bold text-green-500 tracking-tight">{websitesUp}</p>
+                <p className="text-sm text-gray-500 tracking-tight">Currently up and running</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold tracking-tighter">Websites Offline</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-4xl font-bold text-red-500 tracking-tight">{websitesDown}</p>
+                <p className="text-sm text-gray-500 tracking-tight">Need attention</p>
+              </CardContent>
+            </Card>
           </div>
-          <Button type="submit">Add Website</Button>
-        </form>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Website</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {websites.map((site) => (
-              <TableRow key={site._id}>
-                <TableCell>{site.url}</TableCell>
-                <TableCell>
-                  {site.status === 'checking' ? (
-                    <div className="flex items-center">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-2" />
-                      Checking
-                    </div>
-                  ) : site.status === 'up' ? (
-                    <div className="flex items-center">
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                      Online
-                    </div>
-                  ) : (
-                    <div className="flex items-center">
-                      <XCircle className="h-4 w-4 text-red-500 mr-2" />
-                      Offline
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Button variant="ghost" size="sm" onClick={() => removeWebsite(site._id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+
+          {/* Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="font-semibold tracking-tighter">Website Status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieChartData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {pieChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="font-semibold tracking-tighter">Response Times</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={websites}>
+                      <XAxis dataKey="url" tickFormatter={truncateUrl} />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="responseTime" fill="#4ade80" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Websites Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-semibold tracking-tighter">Your Websites</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={addWebsite} className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mb-4">
+                <div className="relative flex-grow">
+                  <Globe className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="url"
+                    placeholder="https://example.com"
+                    value={newUrl}
+                    onChange={(e) => setNewUrl(e.target.value)}
+                    className="pl-8"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="bg-[#0500FF] hover:bg-black">Add Website</Button>
+              </form>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-1/3">Website</TableHead>
+                      <TableHead className="w-1/6">Status</TableHead>
+                      <TableHead className="w-1/6 hidden md:table-cell">Last Checked</TableHead>
+                      <TableHead className="w-1/6 hidden md:table-cell">Response Time</TableHead>
+                      <TableHead className="w-1/6">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {websites.map((site) => (
+                      <TableRow key={site._id} className="hover:bg-gray-50">
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/website/${encodeURIComponent(site.url)}`}
+                            className="flex items-center space-x-2 text-gray-900 hover:text-blue-800"
+                          >
+                            {site.favicon && (
+                              <Image
+                                src={site.favicon}
+                                alt={`${site.url} favicon`}
+                                width={16}
+                                height={16}
+                                className="rounded-sm"
+                              />
+                            )}
+                            <span className="tracking-tight truncate max-w-[200px]">{truncateUrl(site.url)}</span>
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          {site.status === "checking" ? (
+                            <div className="flex items-center text-yellow-500">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span className="tracking-tight hidden sm:inline ml-2">Checking</span>
+                            </div>
+                          ) : site.status === "up" ? (
+                            <div className="flex items-center text-green-500">
+                              <CheckCircle className="h-4 w-4" />
+                              <span className="tracking-tight hidden sm:inline ml-2">Online</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center text-red-500">
+                              <XCircle className="h-4 w-4 " />
+                              <span className="tracking-tight hidden sm:inline ml-2">Offline</span>
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell tracking-tight">
+                          {site.lastChecked ? new Date(site.lastChecked).toLocaleString() : "N/A"}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell tracking-tight">
+                          {site.responseTime ? `${site.responseTime}ms` : "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Link href={`/website/${encodeURIComponent(site.url)}`} passHref>
+                              <Button variant="outline" size="sm" className="hidden sm:flex">
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Details
+                              </Button>
+                            </Link>
+                            <Button variant="outline" size="sm" onClick={() => removeWebsite(site._id)}>
+                              <Trash2 className="h-4 w-4 sm:mr-2" />
+                              <span className="hidden sm:inline">Remove</span>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    </div>
   )
 }

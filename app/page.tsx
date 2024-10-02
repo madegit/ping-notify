@@ -1,10 +1,10 @@
-import UptimeMonitor from '@/components/uptime-monitor'
+import HomePage from '@/components/homepage'
 
-export default function Home() {
-  return (
-    <main className="container mx-auto p-4">
-      <h1 className="text-4xl mt-2 tracking-tight font-bold text-center mb-8">PingNotify</h1>
-      <UptimeMonitor />
-    </main>
-  )
+export const metadata = {
+  title: 'PingNotify - Website Uptime Monitoring',
+  description: 'Monitor your websites\' uptime and get instant notifications with PingNotify.',
+}
+
+export default function Page() {
+  return <HomePage />
 }

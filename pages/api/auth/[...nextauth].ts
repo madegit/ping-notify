@@ -1,10 +1,15 @@
-import NextAuth from 'next-auth'
+import NextAuth, { NextAuthOptions, User } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter"
 import clientPromise from '@/lib/mongodb'
 import { compare } from 'bcrypt'
+import { JWT } from 'next-auth/jwt'
 
-export const authOptions = {
+interface CustomUser extends User {
+  id: string;
+}
+
+export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(clientPromise),
   providers: [
     CredentialsProvider({
@@ -44,21 +49,21 @@ export const authOptions = {
     strategy: 'jwt'
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: JWT; user?: CustomUser }) {
       if (user) {
         token.id = user.id
       }
       return token
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: JWT }) {
       if (session.user) {
-        session.user.id = token.id
+        session.user.id = token.id as string
       }
       return session
     }
   },
   pages: {
-    signIn: '/login'
+    signIn: '/app'
   },
   secret: process.env.NEXTAUTH_SECRET
 }

@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { checkAllWebsites } from '../../lib/backgroundTasks'
-
+ 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'POST') {
     const authHeader = req.headers.authorization

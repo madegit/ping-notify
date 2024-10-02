@@ -20,7 +20,7 @@ export default function UptimeMonitor() {
   }, [status])
 
   if (isLoading) {
-    return <div>Loading...</div>
+    return <div className="flex items-center justify-center min-h-[60vh] text-muted-foreground">Loading...</div>
   }
 
   if (!session) {

@@ -2,9 +2,15 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { hash } from 'bcrypt'
 import clientPromise from '@/lib/mongodb'
 
+type ResponseData = {
+  message: string
+  userId?: string
+  error?: string
+}
+
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse<ResponseData>
 ) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' })
@@ -34,9 +40,14 @@ export default async function handler(
       password: hashedPassword,
     })
 
-    res.status(201).json({ message: 'User created', userId: result.insertedId })
+    res.status(201).json({ message: 'User created', userId: result.insertedId.toString() })
   } catch (error) {
     console.error('Detailed error in signup:', error)
-    res.status(500).json({ message: 'Internal server error', error: error.message })
+
+    if (error instanceof Error) {
+      res.status(500).json({ message: 'Internal server error', error: error.message })
+    } else {
+      res.status(500).json({ message: 'Internal server error', error: 'An unknown error occurred' })
+    }
   }
 }

@@ -5,20 +5,24 @@ const prisma = new PrismaClient()
 
 async function checkWebsiteStatus(url: string): Promise<'up' | 'down'> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // Set a 5-second timeout
+
     const response = await fetch(url, { 
-      method: 'HEAD', 
-      timeout: 5000,
+      method: 'HEAD',
       headers: {
         'User-Agent': 'PingNotify/1.0'
-      }
-    })
+      },
+      signal: controller.signal 
+    });
+
+    clearTimeout(timeoutId); // Clear the timeout if the request completes successfully
     return response.ok ? 'up' : 'down'
   } catch (error) {
     console.error(`Error checking ${url}:`, error)
     return 'down'
   }
 }
-
 async function sendNotificationEmail(to: string, websiteUrl: string) {
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,

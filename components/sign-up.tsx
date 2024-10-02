@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState } from 'react'
 import { Button } from "@/components/ui/button"
@@ -12,11 +12,13 @@ export default function SignUp() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [isSigningUp, setIsSigningUp] = useState(false)
   const toast = useCustomToast()
   const router = useRouter()
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsSigningUp(true)
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
@@ -32,7 +34,7 @@ export default function SignUp() {
           password,
         })
         if (result?.ok) {
-          router.push('/dashboard')
+          router.push('/app')
           toast.success("Account created", "You've been successfully signed up and logged in.")
         } else {
           toast.error("Login failed", result?.error || "Please try logging in manually.")
@@ -44,6 +46,8 @@ export default function SignUp() {
     } catch (error) {
       console.error(error)
       toast.error("An error occurred", "Please try again later.")
+    } finally {
+      setIsSigningUp(false)
     }
   }
 
@@ -87,13 +91,20 @@ export default function SignUp() {
             id="password"
             type="password"
             value={password}
+            placeholder="•••••"
             onChange={(e) => setPassword(e.target.value)}
             className="pl-8"
             required
           />
         </div>
       </div>
-      <Button type="submit" className="w-full">Sign Up</Button>
+      <Button 
+        type="submit" 
+        className="w-full bg-[#0500FF]" 
+        disabled={isSigningUp}
+      >
+        {isSigningUp ? 'Signing up...' : 'Sign Up'}
+      </Button>
     </form>
   )
 }

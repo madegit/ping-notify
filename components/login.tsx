@@ -25,7 +25,7 @@ export default function Login() {
         password,
       })
       if (result?.ok) {
-        router.push('/dashboard')
+        router.push('/app')
         toast.success("Logged in successfully", "Welcome back!")
       } else {
         toast.error("Login failed", result?.error || "Please check your credentials and try again.")
@@ -63,13 +63,15 @@ export default function Login() {
             id="password"
             type="password"
             value={password}
+            placeholder="•••••"
+
             onChange={(e) => setPassword(e.target.value)}
             className="pl-8"
             required
           />
         </div>
       </div>
-      <Button type="submit" className="w-full" disabled={isLoading}>
+      <Button type="submit" className="w-full bg-[#0500FF]" disabled={isLoading}>
         {isLoading ? 'Logging in...' : 'Login'}
       </Button>
     </form>
