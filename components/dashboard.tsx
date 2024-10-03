@@ -200,7 +200,7 @@ export default function Dashboard() {
   const pieChartData = [
     { name: "Up", value: websitesUp, color: "#10B981" },
     { name: "Down", value: websitesDown, color: "#EF4444" },
-    { name: "Checking", value: websitesChecking, color: "#6B7280" },
+    { name: "Checking", value: websitesChecking, color: "#FFC922" },
   ]
 
   const getInitials = (name: string) => {

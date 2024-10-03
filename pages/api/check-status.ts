@@ -4,8 +4,7 @@ import dns from 'dns'
 import { promisify } from 'util'
 import fetch from 'node-fetch'
 import { JSDOM } from 'jsdom'
-import fs from 'fs'
-import path from 'path'
+import { cacheFavicon } from './cache-favicon'
 
 const resolveDns = promisify(dns.resolve)
 const lookup = promisify(dns.lookup)
@@ -18,7 +17,7 @@ export default async function handler(
     return res.status(405).json({ message: 'Method not allowed' })
   }
 
-  const { url, isPublic = true } = req.body
+  const { url, isPublic = true, userId } = req.body
 
   if (!url) {
     return res.status(400).json({ message: 'URL is required' })
@@ -62,26 +61,10 @@ export default async function handler(
         const dom = new JSDOM(html)
         const doc = dom.window.document
 
-        const faviconLink = doc.querySelector('link[rel="icon"]') || 
-                            doc.querySelector('link[rel="shortcut icon"]')
-
-        if (faviconLink) {
-          const faviconHref = faviconLink.getAttribute('href')
-          if (faviconHref) {
-            const faviconUrl = new URL(faviconHref, url).href
-            const faviconResponse = await fetch(faviconUrl)
-            if (faviconResponse.ok) {
-              const buffer = await faviconResponse.buffer()
-              const faviconDir = path.join(process.cwd(), 'public', 'favicons')
-              if (!fs.existsSync(faviconDir)) {
-                fs.mkdirSync(faviconDir, { recursive: true })
-              }
-              const faviconFilename = `${Buffer.from(url).toString('base64')}.ico`
-              const faviconPath = path.join(faviconDir, faviconFilename)
-              fs.writeFileSync(faviconPath, buffer)
-              favicon = `/favicons/${faviconFilename}`
-            }
-          }
+        try {
+          favicon = await cacheFavicon(url)
+        } catch (error) {
+          console.error('Error caching favicon:', error)
         }
 
         siteName = doc.querySelector('meta[property="og:site_name"]')?.getAttribute('content') || 
@@ -106,40 +89,38 @@ export default async function handler(
     }
 
     if (isPublic) {
-      await db.collection('checkedWebsites').updateOne(
-        { url },
-        { $set: websiteData },
-        { upsert: true }
-      )
-
-      // Add entry to statusHistory collection
-      await db.collection('statusHistory').insertOne({
-        url,
-        status,
-        timestamp: new Date()
-      })
-
-      // Log to recentlyCheckedWebsites
-      await db.collection('recentlyCheckedWebsites').insertOne({
-        url,
-        status,
-        timestamp: new Date()
-      })
+      await Promise.all([
+        db.collection('checkedWebsites').updateOne(
+          { url },
+          { $set: websiteData },
+          { upsert: true }
+        ),
+        db.collection('statusHistory').insertOne({
+          url,
+          status,
+          timestamp: new Date()
+        }),
+        db.collection('recentlyCheckedWebsites').insertOne({
+          url,
+          status,
+          timestamp: new Date()
+        })
+      ])
     } else {
       // For dashboard websites
-      await db.collection('dashboardWebsites').updateOne(
-        { url, userId: req.body.userId },
-        { $set: websiteData },
-        { upsert: true }
-      )
-
-      // Add entry to dashboardStatusHistory collection
-      await db.collection('dashboardStatusHistory').insertOne({
-        url,
-        userId: req.body.userId,
-        status,
-        timestamp: new Date()
-      })
+      await Promise.all([
+        db.collection('dashboardWebsites').updateOne(
+          { url, userId },
+          { $set: websiteData },
+          { upsert: true }
+        ),
+        db.collection('dashboardStatusHistory').insertOne({
+          url,
+          userId,
+          status,
+          timestamp: new Date()
+        })
+      ])
     }
 
     res.status(200).json(websiteData)

@@ -3,11 +3,38 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   images: {
-    domains: ['porkbun.com'], // Add other domains as needed
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**',
+        hostname: 'porkbun.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'github.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'stickermule.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'gumroad.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'zoom.us',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.cloud',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.microsoft.com',
       },
     ],
   },
