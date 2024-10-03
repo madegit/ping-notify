@@ -27,18 +27,20 @@ export default async function handler(
     const client = await clientPromise
     const db = client.db()
 
+    // Extract domain from URL
+    const domain = new URL(url).hostname
+
     // Perform DNS lookup
     let dnsRecords = {}
     let ip = null
     try {
-      const hostname = new URL(url).hostname
       const [aRecords, cnameRecords, mxRecords] = await Promise.all([
-        resolveDns(hostname, 'A').catch(() => []),
-        resolveDns(hostname, 'CNAME').catch(() => []),
-        resolveDns(hostname, 'MX').catch(() => [])
+        resolveDns(domain, 'A').catch(() => []),
+        resolveDns(domain, 'CNAME').catch(() => []),
+        resolveDns(domain, 'MX').catch(() => [])
       ])
       dnsRecords = { a: aRecords, cname: cnameRecords, mx: mxRecords }
-      const { address } = await lookup(hostname)
+      const { address } = await lookup(domain)
       ip = address
     } catch (error) {
       console.error('DNS lookup error:', error)
@@ -78,6 +80,7 @@ export default async function handler(
 
     const websiteData = {
       url,
+      domain,
       status,
       lastChecked: new Date(),
       ip,
@@ -91,17 +94,17 @@ export default async function handler(
     if (isPublic) {
       await Promise.all([
         db.collection('checkedWebsites').updateOne(
-          { url },
+          { domain },
           { $set: websiteData },
           { upsert: true }
         ),
         db.collection('statusHistory').insertOne({
-          url,
+          domain,
           status,
           timestamp: new Date()
         }),
         db.collection('recentlyCheckedWebsites').insertOne({
-          url,
+          domain,
           status,
           timestamp: new Date()
         })
@@ -110,12 +113,12 @@ export default async function handler(
       // For dashboard websites
       await Promise.all([
         db.collection('dashboardWebsites').updateOne(
-          { url, userId },
+          { domain, userId },
           { $set: websiteData },
           { upsert: true }
         ),
         db.collection('dashboardStatusHistory').insertOne({
-          url,
+          domain,
           userId,
           status,
           timestamp: new Date()

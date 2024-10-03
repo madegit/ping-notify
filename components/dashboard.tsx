@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useCustomToast } from "@/hooks/use-toast"
-import { Loader2, Trash2, Globe, CheckCircle, XCircle, ExternalLink, LogOut } from "lucide-react"
+import { Loader2, Trash2, Globe, CheckCircle, XCircle, ExternalLink, LogOut, ArrowDownRight } from "lucide-react"
 import { useSession, signOut } from "next-auth/react"
 import { Session } from "next-auth"
 import Image from "next/image"
@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 type Website = {
   _id: string
   url: string
+  domain: string
   status: "up" | "down" | "checking"
   lastChecked?: string
   responseTime?: number
@@ -25,7 +26,7 @@ type Website = {
   dns?: {
     a?: string[]
     cname?: string[]
-    mx?: string[]
+    mx?: { exchange: string; priority: number }[]
   }
   siteName?: string
   siteDescription?: string
@@ -40,8 +41,12 @@ interface CustomSession extends Session {
   }
 }
 
-function truncateUrl(url: string): string {
-  return url.replace(/^https?:\/\//, "").replace(/\/$/, "")
+function truncateUrl(url: string, maxLength: number = 30): string {
+  const cleanUrl = url.replace(/^(https?:\/\/)/, '');
+  if (cleanUrl.length <= maxLength) return cleanUrl;
+  const start = cleanUrl.substring(0, Math.floor(maxLength / 2) - 2);
+  const end = cleanUrl.substring(cleanUrl.length - Math.floor(maxLength / 2) + 1);
+  return `${start}...${end}`;
 }
 
 export default function Dashboard() {
@@ -64,7 +69,7 @@ export default function Dashboard() {
   useEffect(() => {
     const checkAllWebsites = async () => {
       for (const website of websitesRef.current) {
-        await checkStatus(website)
+        await checkStatus(website, false)
       }
     }
 
@@ -82,7 +87,7 @@ export default function Dashboard() {
         setWebsites(
           data.map((site: Website) => ({ ...site, status: "checking" }))
         )
-        data.forEach((site: Website) => checkStatus(site))
+        data.forEach((site: Website) => checkStatus(site, false))
       } else {
         toast.error("Failed to fetch websites", "Please try again later.")
       }
@@ -94,6 +99,12 @@ export default function Dashboard() {
   const addWebsite = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const domain = new URL(newUrl).hostname
+      if (websites.some(site => site.domain === domain)) {
+        toast.error("Website already exists", "This website is already being monitored.")
+        return
+      }
+
       const response = await fetch("/api/websites", {
         method: "POST",
         headers: {
@@ -109,7 +120,7 @@ export default function Dashboard() {
         ])
         setNewUrl("")
         toast.success("Website added", "Checking status...")
-        checkStatus(newWebsite)
+        checkStatus(newWebsite, true)
       } else {
         toast.error("Failed to add website", "Please try again.")
       }
@@ -141,21 +152,26 @@ export default function Dashboard() {
   }
 
   const checkStatus = useCallback(
-    async (website: Website) => {
+    async (website: Website, isInitialCheck: boolean) => {
       try {
         const response = await fetch("/api/check-status", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ url: website.url, isPublic: false, userId: session?.user?.id }),
+          body: JSON.stringify({ 
+            url: website.url, 
+            isPublic: false, 
+            userId: session?.user?.id,
+            isInitialCheck: isInitialCheck
+          }),
         })
 
         if (!response.ok) {
           throw new Error("Network response was not ok")
         }
 
-        const data = await response.json()
+        const data: Website = await response.json()
         updateWebsiteStatus(website._id, data)
 
         if (data.status === "down") {
@@ -163,7 +179,53 @@ export default function Dashboard() {
             "Website is down!",
             `${website.url} is currently unreachable.`
           )
+        } else {
+          toast.success(
+            "Website is up!",
+            `${website.url} is currently reachable.`
+          )
         }
+
+        // Cache favicon
+        if (data.favicon) {
+          const faviconResponse = await fetch(`/api/cache-favicon?url=${encodeURIComponent(website.url)}`)
+          const faviconData = await faviconResponse.json()
+          if (faviconData.cachedPath) {
+            updateWebsiteStatus(website._id, { favicon: faviconData.cachedPath })
+          }
+        }
+
+        if (isInitialCheck) {
+          // Update recently checked websites
+          await fetch('/api/recent-websites', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: website.url,
+              domain: website.domain,
+              status: data.status,
+              lastChecked: new Date().toISOString(),
+              favicon: data.favicon
+            }),
+          })
+
+          // Update status history
+          await fetch('/api/status-history', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: website.url,
+              domain: website.domain,
+              status: data.status,
+              timestamp: new Date().toISOString()
+            }),
+          })
+        }
+
       } catch (err) {
         console.error("Error checking website status:", err)
         updateWebsiteStatus(website._id, { status: "down" })
@@ -218,19 +280,17 @@ export default function Dashboard() {
           <AvatarImage src={session?.user?.image || ""} alt="User" />
           <AvatarFallback>{getInitials(session?.user?.name || "User")}</AvatarFallback>
         </Avatar>
-        <Button onClick={handleLogout} variant="outline" className=" bg-transparent shadow-none rounded-lg">
+        <Button onClick={handleLogout} variant="outline" className="bg-transparent shadow-none rounded-lg">
           <LogOut className="w-4 h-4 text-[#0500FF]" />
           <span className="hidden sm:inline ml-2">Logout</span>
         </Button>
       </div>
-      
-      {/* Main content */}
+
       <main className="flex-1 p-4 sm:p-6 lg:p-8">
         <h1 className="text-4xl font-semibold tracking-tighter text-gray-900 mb-5">
           Welcome, {session?.user?.name}!
         </h1>
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Quick Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <Card className="bg-[#0500FF] text-white">
               <CardHeader>
@@ -261,7 +321,6 @@ export default function Dashboard() {
             </Card>
           </div>
 
-          {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
@@ -311,26 +370,42 @@ export default function Dashboard() {
             </Card>
           </div>
 
-          {/* Websites Table */}
+          <Card className="bg-blue-50 rounded-xl overflow-hidden lg:py-10">
+            <CardContent className="p-8 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+              <div className="space-y-4 lg:w-1/2">
+                <p className="text-[#0500FF] text-sm font-semibold">ADD WEBSITE</p>
+                <h2 className="text-2xl text-gray-900 lg:text-4xl font-semibold tracking-tighter">Monitor New Website</h2>
+                <p className="text-gray-700">
+                  Enter a URL to add a new website to your monitoring list. We'll check its status regularly.
+                </p>
+              </div>
+              <div className="w-full lg:w-1/2 space-y-4">
+                <p className="font-semibold text-[#0500FF]">Add it here <ArrowDownRight className="inline-block h-5 w-5"/></p>
+                <form onSubmit={addWebsite} className="space-y-4">
+                  <div className="relative flex-grow">
+                    <Globe className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="url"
+                      placeholder="https://example.com"
+                      value={newUrl}
+                      onChange={(e) => setNewUrl(e.target.value)}
+                      className="pl-8"
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full bg-[#0500FF] text-white hover:bg-blue-600 transition-colors">
+                    Add Website
+                  </Button>
+                </form>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="font-semibold tracking-tighter">Your Websites</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={addWebsite} className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mb-4">
-                <div className="relative flex-grow">
-                  <Globe className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="url"
-                    placeholder="https://example.com"
-                    value={newUrl}
-                    onChange={(e) => setNewUrl(e.target.value)}
-                    className="pl-8"
-                    required
-                  />
-                </div>
-                <Button type="submit" className="bg-[#0500FF] hover:bg-black">Add Website</Button>
-              </form>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
