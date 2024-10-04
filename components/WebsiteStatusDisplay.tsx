@@ -92,9 +92,10 @@ export default function WebsiteStatusDisplay({ website }: WebsiteStatusDisplayPr
         <div className="space-y-4">
           <div className="flex items-center">
             {website.status === 'up' ? (
-              <CheckCircle className="text-green-500 h-4 w-4 mr-2" />
+              <CheckCircle className="text-green-500 h-5 w-5 mr-2" />
             ) : (
-              <XCircle className="text-red-500 h-4 w-4 mr-2" />
+              <XCircle className="text-red-500 h-5
+                w-5 mr-2" />
             )}
             <p className="text-xl tracking-tight">
               <span className='font-semibold'>Status:</span> {website.status === 'up' ? 'Online' : 'Offline'}

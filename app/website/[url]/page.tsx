@@ -3,6 +3,7 @@ import clientPromise from '@/lib/mongodb'
 import Link from 'next/link'
 import { Button } from "@/components/ui/button"
 import WebsiteStatusDisplay from '@/components/WebsiteStatusDisplay'
+import { MessagesSquare } from 'lucide-react'
 
 type WebsiteProps = {
   params: { url: string }
@@ -74,7 +75,7 @@ export default async function WebsitePage({ params }: WebsiteProps) {
           <p>
             © 2024 PingNotify. All rights reserved.
             <br />
-            <Link href="https://x.com/madethecreator" target="_blank" rel="noopener noreferrer">
+            <MessagesSquare className="inline-block h-4 w-4"/> Feedback:<Link href="https://x.com/madethecreator" target="_blank" rel="noopener noreferrer">
               @madethecreator
             </Link>
           </p> 

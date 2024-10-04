@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import Link from 'next/link'
 import Image from 'next/image'
 import { useTheme } from 'next-themes'
-import { Zap, LogIn } from 'lucide-react'
+import { Zap, MessagesSquare, LogIn } from 'lucide-react'
 import dynamic from 'next/dynamic'
 
 const RecentlyCheckedWebsites = dynamic(() => import('@/components/RecentlyCheckedWebsites'), {
@@ -91,7 +91,7 @@ export default function HomePage() {
           <p>
             © 2024 PingNotify. All rights reserved.
             <br />
-            <Link href="https://x.com/madethecreator" target="_blank" rel="noopener noreferrer">
+           <MessagesSquare className="inline-block h-4 w-4"/> Feedback <Link href="https://x.com/madethecreator" target="_blank" rel="noopener noreferrer">
               @madethecreator
             </Link>
           </p> 
